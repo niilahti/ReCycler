@@ -1,9 +1,18 @@
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
-import Link from "next/link";
 import { useState } from "react";
 import { useFormContext } from "react-hook-form";
-import Container from "./container";
 import { Button } from "./ui/button";
+import { GetStaticProps } from "next";
+import { Pool } from 'pg';
+
+// PostgreSQL connection setup
+const pool = new Pool({
+  host: 'localhost',
+  port: 5434,
+  user: 'postgres',
+  password: 'foobar',
+  database: 'postgres',
+});
 
 const CustomCheckbox = ({ label, name }: { label: string; name: string }) => {
   const { register, watch } = useFormContext();
@@ -26,32 +35,45 @@ const CustomCheckbox = ({ label, name }: { label: string; name: string }) => {
   );
 };
 
-const wasteTypes: string[] = [
-  "Energiajäte",
-  "Kartonki",
-  "Lamppu",
-  "Lasi",
-  "Muovi",
-  "Paperi",
-  "Pienmetalli",
-  "Puu",
-  "Sekajäte",
-  "Tekstiili",
-];
+export const getStaticProps: GetStaticProps = async () => {
+  let wasteTypes: string[] = [];
+  let moreWasteTypes: string[] = [];
 
-const moreWasteTypes: string[] = [
-  "Ajoneuvoakut (lyijy)",
-  "Kannettavat akut ja paristot",
-  "Kyllästetty puu",
-  "Muu jäte",
-  "Poistotekstiili",
-  "Puutarhajäte",
-  "Rakennus- ja purkujäte",
-  "Sähkölaite",
-  "Vaarallinen jäte",
-];
+  try {
+    const client = await pool.connect();
 
-export const Materials = () => {
+    // Fetch first 10 waste types
+    const result = await client.query(`
+      SELECT material_name 
+      FROM recycler.materials 
+      ORDER BY material_name 
+      LIMIT 10
+    `);
+    wasteTypes = result.rows.map(row => row.material_name);
+
+    // Fetch the rest of the waste types
+    const moreResult = await client.query(`
+      SELECT material_name 
+      FROM recycler.materials 
+      ORDER BY material_name 
+      OFFSET 10
+    `);
+    moreWasteTypes = moreResult.rows.map(row => row.material_name);
+
+    client.release();
+  } catch (err) {
+    console.error("Error fetching data from PostgreSQL:", err);
+  }
+
+  return {
+    props: {
+      wasteTypes,
+      moreWasteTypes,
+    },
+  };
+};
+
+const Materials = ({ wasteTypes, moreWasteTypes }: { wasteTypes: string[]; moreWasteTypes: string[] }) => {
   const [showMore, setShowMore] = useState(false);
 
   return (
@@ -87,3 +109,5 @@ export const Materials = () => {
     </>
   );
 };
+
+export default Materials;
